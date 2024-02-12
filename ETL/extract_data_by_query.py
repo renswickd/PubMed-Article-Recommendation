@@ -1,7 +1,16 @@
 from bs4 import BeautifulSoup
 import requests
+import chromadb
+from pprint import pprint
 
 from utils import create_search_link
+
+client = chromadb.Client()
+
+collection = client.create_collection(
+      name="pubmed",
+      metadata={"hnsw:space": "cosine"}
+  )
 
 metadata_url = create_search_link(input().strip()) #"https://pubmed.ncbi.nlm.nih.gov/?term=covid"
 metadata_response = requests.get(metadata_url)
@@ -54,3 +63,38 @@ output format:
     
 }
 '''
+
+doc_list = []
+pmid_list = []
+for k in extracted_content.keys():
+    if 'abstract' in extracted_content[k].keys():
+    # print(extracted_content[k]['abstract'])
+        doc_list.append(extracted_content[k]['abstract'])
+        embeddings_list.append(list(model.encode(extracted_content[k]['abstract'])))
+        # print(k)
+        pmid_list.append(k)
+        
+meta = []
+for i in range(len(pmid_list)):
+    meta.append({"topic":term})
+    
+collection.add(
+    embeddings = collection.get(ids=pmid_list, include=['embeddings'])['embeddings'],
+    documents= doc_list,
+    metadatas=meta,
+    ids=pmid_list,
+)
+
+query = []
+user_input = input("Enter the query: ") #Try "Haemophilia affects which age group?"
+query.append(user_input)
+
+results = collection.query(
+    query_texts=query, #example in case when the search key was "haemophilia"
+    n_results=len(pmid),
+    include = ["embeddings","distances","documents"]
+)
+
+find_index = results['distances'][0].index(min(results['distances'][0]))
+print(results['ids'][0][find_index])
+print(results['documents'][0][find_index])
